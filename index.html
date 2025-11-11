@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -59,10 +59,10 @@
     body.hide-ui .app{grid-template-columns:1fr;padding:0;min-height:100dvh}
       /* HUD: seed controls above the Randomise button */
     .hud-seed{position:absolute; right:16px; bottom:64px; z-index:10; display:flex; gap:8px; align-items:center; background:rgba(255,255,255,.9); backdrop-filter:blur(6px); border:1px solid rgba(255,120,30,.45); padding:8px 10px; border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,.15),0 0 18px -6px rgba(255,140,64,.45)}
-    .hud-seed input{width:160px; max-width:40vw; background:#ffffff; color:#181818; border:1px solid rgba(255,120,30,.45); border-radius:8px; padding:8px 10px; outline:none}
+    .hud-seed input{width:100px; max-width:40vw; background:#ffffff; color:#181818; border:1px solid rgba(255,120,30,.45); border-radius:8px; padding:8px 10px; outline:none}
     .hud-seed input::placeholder{color:#9fb3d1}
     .hud-seed .seed-label{color:#9fb3d1; font-size:12px}
-    .hud-seed .seed-value{font-weight:700; color:#e8eefc; max-width:26ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+    .hud-seed .seed-value{font-weight:500; color:#e8eefc; max-width:26ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
     .hud-seed button{padding:8px 10px;border-radius:8px;font-weight:700}
     /* Logo positioned just above the seed bar */
     .hud-logo{ position:absolute; right:24px; bottom: 135px; z-index:11; }
@@ -225,12 +225,11 @@ main.panel{ background:#000; }
         <button id="runSeed">Run Seed</button>
         <button id="rand">Randomise</button>
         <button class="danger" id="clear">Clear Trails</button>
-        <button id="btn1080">Open 1920Ã—1080</button>
       </div>
     </aside>
 
     <main class="panel">
-       <canvas id="sim" width="1200" height="800" aria-label="3-Body simulation area"></canvas>
+       <canvas id="sim" width="800" height="800" aria-label="3-Body simulation area"></canvas>
       <div class="hud-logo" aria-hidden="true">
         <img src="3bp-logo.png" alt="3BP logo"/>
       </div>
