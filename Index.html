@@ -1,0 +1,918 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Three-Body Simulator</title>
+  <style>
+    :root{ --bg:#f8f6f4; --panel:#ffffff; --accent:#ff7a2e; --text:#181818; --muted:#7a6e66; --danger:#e94141; --ok:#2e8b57; --btn-border:#ff6a00; --btn-text:#181818; --btn-bg:linear-gradient(180deg,#ffffff,#f3efe9 70%); --btn-glow:rgba(255,140,64,.45); }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial,"Apple Color Emoji","Segoe UI Emoji"}
+    h1{font-size:clamp(18px,3vw,28px);margin:0 0 .5rem 0;letter-spacing:.5px}
+    .app{display:grid;grid-template-columns:340px 1fr;gap:14px;min-height:100dvh;padding:14px}
+    @media (max-width: 880px){.app{grid-template-columns:1fr;grid-template-rows:auto 1fr}}
+    .panel{background:linear-gradient(180deg,#ffffff,#f7f3ee 60%);border:1px solid rgba(255,120,30,.3);border-radius:16px;box-shadow:0 10px 24px rgba(0,0,0,.15),0 0 32px -8px rgba(255,140,64,.35);padding:14px}
+    .panel header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .row{display:grid;grid-template-columns:1fr 70px;gap:10px;align-items:center;margin:10px 0}
+    .row small{color:var(--muted)}
+    fieldset{border:1px solid rgba(255,120,30,.35);border-radius:12px;padding:10px 12px;margin:10px 0;background:linear-gradient(180deg,rgba(255,120,30,.04),rgba(255,120,30,.02) 60%)}
+    legend{color:var(--accent);padding:0 6px}
+    label{display:block;font-size:12px;color:var(--muted);margin:2px 0 6px}
+    input[type="range"]{width:100%}
+    .controls{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
+    @media (max-width: 420px){.controls{grid-template-columns:1fr 1fr}}
+    /* Modern sciâ€‘fi button system */
+    button,.btn{appearance:none;position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--btn-border);background:var(--btn-bg);color:var(--btn-text);font-weight:700;letter-spacing:.3px;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.35),0 0 0 0 rgba(124,199,255,0),inset 0 0 0 1px rgba(255,255,255,.06);transition:transform .12s ease,filter .2s ease,box-shadow .25s ease,background .25s ease;font-family:"Futura","Futura PT","Avenir Next","Avenir","Montserrat","Poppins","Century Gothic","Tw Cen MT","Segoe UI","Helvetica Neue",Arial,sans-serif}
+    /* sheen */
+    button::after,.btn::after{content:"";position:absolute;inset:0;border-radius:inherit;background:radial-gradient(120% 80% at 10% 0%,rgba(255,255,255,.12),transparent 40%);pointer-events:none;mix-blend-mode:screen}
+    /* subtle star sparkle overlay */
+    button:hover,.btn:hover{filter:brightness(1.08);box-shadow:0 10px 26px rgba(0,0,0,.4),0 0 18px -6px var(--btn-glow)}
+    button:active,.btn:active{transform:translateY(1px);filter:brightness(1.02)}
+    button:focus-visible,.btn:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(255,140,64,.5),0 0 0 4px rgba(255,106,0,.35),0 0 24px -6px var(--btn-glow)}
+    .primary{--btn-bg:linear-gradient(180deg,#ffffff,#f3efe9 60%);--btn-border:#ff6a00;--btn-glow:rgba(255,140,64,.6)}
+    .danger{--btn-bg:linear-gradient(180deg,#6b1f1f,#3d1414 60%);--btn-border:#ff4d4d;--btn-glow:rgba(255,107,107,.5)}
+    .ok{--btn-bg:linear-gradient(180deg,#1f6b49,#173d2c 60%);--btn-border:#21c487;--btn-glow:rgba(125,255,179,.45)}
+    canvas{width:100%;height:100%;display:block;background:#000}
+    .legend{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .dot{width:10px;height:10px;border-radius:50%}
+    .kv{display:flex;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:12px}
+    .kv span{background:#fff7f0;border:1px solid rgba(255,120,30,.35);color:#503018;padding:4px 6px;border-radius:8px;box-shadow:0 0 16px -8px rgba(255,140,64,.4)}
+    
+    /* UI hide mode for clean capture */
+    body.hide-ui #sidebar{display:none}
+    body.hide-ui .app{grid-template-columns:1fr; padding:0; min-height:100dvh}
+    body.hide-ui .panel{border-radius:0;border:0;box-shadow:none}
+    body.hide-ui main.panel{padding:0}
+    body.hide-ui{cursor:crosshair}
+    /* ensure the canvas panel grows to fill viewport */
+    main.panel{padding:0;position:relative;display:flex;min-height:calc(100dvh - 28px)}
+    body.hide-ui main.panel{min-height:100dvh}
+    /* in-canvas HUD button */
+    .hud-btn{padding:10px 14px;border-radius:12px}
+    .hud-actions{position:absolute; right:16px; bottom:16px; z-index:10; display:flex; gap:8px}
+      /* --- anti-scrollbar overrides for 1080p --- */
+    @media (min-height: 900px){
+      html,body{overflow:hidden}
+      .app{height:100dvh;min-height:100dvh;padding:0}
+      main.panel{min-height:100dvh}
+    }
+    body.hide-ui .app{grid-template-columns:1fr;padding:0;min-height:100dvh}
+      /* HUD: seed controls above the Randomise button */
+    .hud-seed{position:absolute; right:16px; bottom:64px; z-index:10; display:flex; gap:8px; align-items:center; background:rgba(255,255,255,.9); backdrop-filter:blur(6px); border:1px solid rgba(255,120,30,.45); padding:8px 10px; border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,.15),0 0 18px -6px rgba(255,140,64,.45)}
+    .hud-seed input{width:160px; max-width:40vw; background:#ffffff; color:#181818; border:1px solid rgba(255,120,30,.45); border-radius:8px; padding:8px 10px; outline:none}
+    .hud-seed input::placeholder{color:#9fb3d1}
+    .hud-seed .seed-label{color:#9fb3d1; font-size:12px}
+    .hud-seed .seed-value{font-weight:700; color:#e8eefc; max-width:26ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+    .hud-seed button{padding:8px 10px;border-radius:8px;font-weight:700}
+    /* Logo positioned just above the seed bar */
+    .hud-logo{ position:absolute; right:24px; bottom: 135px; z-index:11; }
+    .hud-logo img{ display:block; height:34px; width:auto; filter: drop-shadow(0 0 18px rgba(255,140,64,.6)); }
+  /* === HUD White Saber Theme (appended) === */
+:root{
+  --hud-neo:#ff9b4a; --hud-neo-2:#ff6a00; --hud-neo-glow:rgba(255,120,30,.85);
+  --hud-ink:transparent; --hud-ink-2:transparent; --hud-line:#ffffff; --hud-bg:#0a0908;
+  --text:#ffffff; --muted:#ffd6b3; --btn-text:#ffffff; --bg:#0a0908;
+}
+
+/* subtle grid + white/orange vignette */
+body{ background: radial-gradient(120% 100% at 50% -10%, #101010 0%, #070606 60%, #050404 100%), var(--bg) !important; }
+body::before{ content:""; position:fixed; inset:0; pointer-events:none; opacity:.32; mix-blend-mode:screen;
+  background: radial-gradient(50% 40% at 50% -10%, rgba(255,120,30,.28), transparent 45%);
+}
+
+/* Sidebar panel: white core with orange glow */
+#sidebar.panel{ position:relative; overflow:clip; border-radius:16px; clip-path:polygon(0 0, calc(100% - 28px) 0, 100% 28px, 100% 100%, 0 100%);
+  background: transparent;
+  border:2px solid #ffffff; box-shadow:0 0 8px #ffffff, 0 0 40px rgba(255,140,64,.85), inset 0 0 0 1px rgba(255,255,255,.25);
+}
+#sidebar.panel::before{ content:""; position:absolute; inset:0; border-radius:14px; pointer-events:none; box-shadow:0 0 50px rgba(255,140,64,.65) inset; }
+#sidebar.panel::after{ content:none; }
+
+/* Headings and small UI text */
+#sidebar h1{ color:#ffffff; text-shadow:0 0 14px rgba(255,140,64,.55), 0 0 3px #fff; letter-spacing:.8px; font-weight:800; }
+legend{ color:var(--hud-neo) !important; text-shadow:0 0 10px var(--hud-neo-glow); font-weight:800; letter-spacing:.6px; }
+label{ color:#ffd6b3 !important; }
+
+/* Fieldset modules with angled corner and inner glow */
+#sidebar fieldset{ position:relative; overflow:clip; border-radius:14px; clip-path:polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 0 100%);
+  background: transparent;
+  border:2px solid #ffffff; box-shadow: 0 0 26px rgba(255,140,64,.75), inset 0 0 0 1px rgba(255,255,255,.35);
+}
+#sidebar .row small{ color:#7a6e66 !important; }
+
+/* Legend and key-value chips */
+#sidebar .legend small{ color:#ffffff; filter:drop-shadow(0 0 12px rgba(255,140,64,.6)); }
+#sidebar .kv span{ background:transparent; border:2px solid #ffffff; color:#ffffff; box-shadow:0 0 22px rgba(255,140,64,.6); }
+
+/* White core buttons with orange glow */
+#sidebar button, .hud-btn, #sidebar .btn, .hud-seed button, #copySeed{
+  --btn-border:#ffffff; --btn-text:#ffffff; --btn-glow:rgba(255,140,64,.75);
+  background: transparent; border:2px solid #ffffff !important; color:var(--btn-text) !important;
+  text-shadow:0 0 14px rgba(255,140,64,.6), 0 0 3px #fff; box-shadow:0 0 30px rgba(255,140,64,.6), inset 0 0 0 1px rgba(255,255,255,.28);
+}
+#sidebar button:hover, .hud-btn:hover, .hud-seed button:hover, #copySeed:hover{ filter:brightness(1.06); box-shadow:0 0 42px rgba(255,140,64,.9), inset 0 0 0 1px rgba(255,255,255,.35); }
+
+/* Range sliders: neon track and glowing thumb */
+#sidebar input[type=range]{ -webkit-appearance:none; appearance:none; height:28px; background:transparent; }
+#sidebar input[type=range]::-webkit-slider-runnable-track{ height:6px; border-radius:8px; background: transparent; border:2px solid #ffffff;
+  box-shadow: 0 0 26px rgba(255,140,64,.6), inset 0 0 0 1px rgba(255,255,255,.3);
+}
+#sidebar input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; margin-top:-6px; width:18px; height:18px; border-radius:6px;
+  background: transparent; border:2px solid #ffffff;
+  box-shadow: 0 0 28px rgba(255,140,64,.9), inset 0 0 0 1px rgba(255,255,255,.3);
+}
+#sidebar input[type=range]::-moz-range-track{ height:6px; border-radius:8px; background: transparent; border:2px solid #ffffff; box-shadow: 0 0 26px rgba(255,140,64,.6), inset 0 0 0 1px rgba(255,255,255,.3); }
+#sidebar input[type=range]::-moz-range-thumb{ width:18px; height:18px; border-radius:6px; background: transparent; border:2px solid #ffffff; box-shadow: 0 0 28px rgba(255,140,64,.9), inset 0 0 0 1px rgba(255,255,255,.3); }
+
+/* Readouts */
+#sidebar #readouts{ color:#ffffff; }
+#sidebar #readouts b{ color:#ffd6b3; }
+
+/* HUD seed box adopts white saber theme */
+.hud-seed{ background:transparent !important; border-color:#ffffff !important; box-shadow:0 6px 18px rgba(0,0,0,.15), 0 0 36px -4px var(--hud-neo-glow), 0 0 8px #fff !important; }
+.hud-seed input{ background:transparent !important; border-color:#ffffff !important; color:#ffffff !important; }
+.hud-seed input::placeholder{ color:#ffd6b3 !important; }
+.hud-seed .seed-label{ color:#ffd6b3 !important; }
+
+/* Keep canvas panel dark for contrast */
+main.panel{ background:#000; }
+/* === End HUD White Saber Theme === */
+  </style>
+</head>
+<body class="hide-ui">
+  <div class="app">
+    <aside class="panel" id="sidebar">
+      <header>
+        <h1>Three-Body Simulator</h1>
+      </header>
+
+      <div class="legend">
+        <div class="dot" style="background:#ef476f"></div><small>Light mass (red)</small>
+        <div class="dot" style="background:#ffd166"></div><small>Medium mass (yellow)</small>
+        <div class="dot" style="background:#ffffff;border:1px solid #999"></div><small>Heavy mass (white)</small>
+      </div>
+
+      <div class="kv" id="readouts"></div>
+
+      <fieldset>
+        <legend>Simulation</legend>
+        <div class="row">
+          <label for="dt">Time step (dt): <b id="dtVal">0.06</b></label>
+          <input type="range" min="0.01" max="1" step="0.01" value="0.06" id="dt">
+        </div>
+        <div class="row">
+          <label for="scale">Zoom multiplier: <b id="scaleVal">1</b></label>
+          <input type="range" min="0.5" max="3" step="0.1" value="1" id="scale">
+        </div>
+        <div class="row">
+          <label for="grav">Gravity (G): <b id="gravVal">300</b></label>
+          <input type="range" min="0.1" max="500" step="0.1" value="300" id="grav">
+        </div>
+        <div class="row">
+          <label for="damp">Damping (%/step): <b id="dampVal">0.01</b></label>
+          <input type="range" min="0" max="5" step="0.01" value="0.01" id="damp">
+        </div>
+        <div class="row">
+          <label for="soft">Softening Îµ: <b id="softVal">7</b></label>
+          <input type="range" min="0" max="20" step="1" value="10" id="soft">
+        </div>
+        <div class="row">
+          <label for="trailLen">Trail length: <b id="trailVal">50</b></label>
+          <input type="range" min="50" max="1200" step="50" value="50" id="trailLen">
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Body 1</legend>
+        <div class="row"><label>Mass <b id="m1o">20</b></label><input type="range" id="m1" min="1" max="200" value="20"></div>
+        <div class="row"><label>X <b id="x1o">-200</b></label><input type="range" id="x1" min="-400" max="400" value="-200"></div>
+        <div class="row"><label>Y <b id="y1o">0</b></label><input type="range" id="y1" min="-300" max="300" value="0"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Body 2</legend>
+        <div class="row"><label>Mass <b id="m2o">20</b></label><input type="range" id="m2" min="1" max="200" value="20"></div>
+        <div class="row"><label>X <b id="x2o">200</b></label><input type="range" id="x2" min="-400" max="400" value="200"></div>
+        <div class="row"><label>Y <b id="y2o">0</b></label><input type="range" id="y2" min="-300" max="300" value="0"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Body 3</legend>
+        <div class="row"><label>Mass <b id="m3o">5</b></label><input type="range" id="m3" min="1" max="200" value="5"></div>
+        <div class="row"><label>X <b id="x3o">0</b></label><input type="range" id="x3" min="-400" max="400" value="0"></div>
+        <div class="row"><label>Y <b id="y3o">160</b></label><input type="range" id="y3" min="-300" max="300" value="160"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Binding tools</legend>
+        <div class="row">
+          <label for="virial">Virial target (2K/|U|): <b id="virialVal">1.0</b></label>
+          <input type="range" id="virial" min="0.5" max="1.2" step="0.05" value="1.0">
+        </div>
+        <div class="row">
+          <label for="bindBlend">Bind blend (%): <b id="bindBlendVal">50</b></label>
+          <input type="range" id="bindBlend" min="0" max="100" step="5" value="50">
+        </div>
+        <div class="row">
+          <label><input type="checkbox" id="lockCM" checked> Lock centre-of-mass frame</label>
+          <small>zero total momentum each step</small>
+        </div>
+      </fieldset>
+
+      <div class="controls">
+        <button class="primary" id="apply">Apply / Reset</button>
+        <button class="ok" id="play">play</button>
+        <button id="runSeed">Run Seed</button>
+        <button id="rand">Randomise</button>
+        <button class="danger" id="clear">Clear Trails</button>
+        <button id="btn1080">Open 1920Ã—1080</button>
+      </div>
+    </aside>
+
+    <main class="panel">
+       <canvas id="sim" width="1200" height="800" aria-label="3-Body simulation area"></canvas>
+      <div class="hud-logo" aria-hidden="true">
+        <img src="3bp-logo.png" alt="3BP logo"/>
+      </div>
+       <div class="hud-seed" aria-label="Seed controls">
+        <span class="seed-label">Seed</span>
+        <input id="seedInput" type="text" placeholder="type a seed & press Enter" aria-label="Seed" />
+        <span class="seed-value" id="seedDisplay" title="Current seed"></span>
+        <button id="copySeed" title="Copy current seed">Copy</button>
+      </div>
+      <div class="hud-actions">
+        <button id="overlayPlay" class="hud-btn" aria-label="Play/Pause">Play</button>
+        <button id="overlayRunSeed" class="hud-btn" aria-label="Run current seed">Run Seed</button>
+        <button id="overlayRand" class="hud-btn" aria-label="Randomise bodies">Randomise</button>
+      </div>
+    </main>
+  </div>
+
+  <script type="text/javascript">
+  window.addEventListener('DOMContentLoaded', () => {
+    'use strict';
+
+    // ---------- helpers ----------
+    const $ = (id)=>document.getElementById(id);
+    const addL = (id, evt, handler)=>{ const el = $(id); if (el) el.addEventListener(evt, handler); else console.warn('Missing element:', id); };
+    const fmt = (n)=> (Math.abs(n) < 1e-2 ? n.toExponential(1) : n.toFixed(2));
+
+    // ---------- canvas / sizing (loop-safe ResizeObserver) ----------
+    const canvas = $('sim');
+    if (!canvas) { console.error('Canvas with id="sim" not found.'); return; }
+    const ctx = canvas.getContext('2d');
+    const DPR = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+
+    // We observe the canvas's parent and coalesce resize work via rAF to avoid RO loops.
+    const roTarget = canvas.parentElement || canvas;
+    let roPending = false;
+    function requestResize(){
+      if (roPending) return;
+      roPending = true;
+      requestAnimationFrame(()=>{ roPending = false; resize(); });
+    }
+    function resize(){
+      // Prefer container size; fall back to viewport if container is not yet laid out
+      let w = Math.max(1, roTarget.clientWidth || (window.innerWidth - 28));
+      let h = Math.max(1, roTarget.clientHeight || (window.innerHeight - 28));
+      const newW = Math.floor(w * DPR);
+      const newH = Math.floor(h * DPR);
+      if (canvas.width !== newW) canvas.width = newW;
+      if (canvas.height !== newH) canvas.height = newH;
+      ctx.setTransform(DPR,0,0,DPR,0,0);
+      makeStars(w, h);
+    }
+    if ('ResizeObserver' in window && roTarget){
+      try {
+        const ro = new ResizeObserver(()=>{ requestResize(); });
+        ro.observe(roTarget);
+      } catch(e){ console.warn('ResizeObserver unavailable:', e); }
+    }
+    window.addEventListener('resize', requestResize);
+
+    // star field (screenâ€‘space so it doesn't parallax with camera)
+    let stars = [];
+    function makeStars(w, h){
+      const sw = w ?? canvas.clientWidth;
+      const sh = h ?? canvas.clientHeight;
+      const count = Math.max(150, Math.round((sw*sh)/(1200*800)*300));
+      stars = Array.from({length:count}, ()=>({
+        x: Math.random()*sw,
+        y: Math.random()*sh,
+        r: Math.random()*1.5 + 0.2,
+        a: Math.random()*0.6 + 0.2
+      }));
+    }
+
+    requestResize();
+
+    // ---------- sim state (defaults per request) ----------
+    let Gc = parseFloat($('grav').value);     // 200
+    let dampPct = parseFloat($('damp').value); // 0.05
+    let dt = parseFloat($('dt').value);        // 0.1
+    let eps = parseFloat($('soft').value);     // 7
+    let trailMax = parseInt($('trailLen').value,10); // 50
+    let userZoomMul = parseFloat($('scale').value);  // zoom multiplier
+
+    const sliders = { m:[ $('m1'), $('m2'), $('m3') ], x:[ $('x1'), $('x2'), $('x3') ], y:[ $('y1'), $('y2'), $('y3') ] };
+    const outputs = { m:[ $('m1o'), $('m2o'), $('m3o') ], x:[ $('x1o'), $('x2o'), $('x3o') ], y:[ $('y1o'), $('y2o'), $('y3o') ] };
+
+    let bodies = [];
+    let running = false;
+    let rafId = null;
+
+    // camera (autoâ€‘fit)
+    const cam = { cx:0, cy:0, scalePx:1, target:'cm' };
+
+    // particles for overlap flashes (visual only)
+    let particles = [];
+    const activeOverlaps = new Set();
+
+    // ---------- physics helpers ----------
+    function computeCM(){
+      let M=0, cx=0, cy=0, cvx=0, cvy=0;
+      for (let i=0;i<bodies.length;i++){ const b=bodies[i]; M+=b.m; cx+=b.x*b.m; cy+=b.y*b.m; cvx+=b.vx*b.m; cvy+=b.vy*b.m; }
+      if (M===0) return {M:0,cx:0,cy:0,cvx:0,cvy:0};
+      return {M, cx:cx/M, cy:cy/M, cvx:cvx/M, cvy:cvy/M};
+    }
+    function zeroCMVelocity(){ const cm=computeCM(); for (let i=0;i<bodies.length;i++){ bodies[i].vx-=cm.cvx; bodies[i].vy-=cm.cvy; } }
+
+    function computeAccelerations(){
+      for (let i=0;i<3;i++){ bodies[i].ax = 0; bodies[i].ay = 0; }
+      for (let i=0;i<3;i++){
+        for (let j=i+1;j<3;j++){
+          const dx = bodies[j].x - bodies[i].x;
+          const dy = bodies[j].y - bodies[i].y;
+          const r2 = dx*dx + dy*dy + eps*eps;
+          const invR3 = 1/Math.pow(r2, 1.5);
+          const fax = Gc * dx * invR3;
+          const fay = Gc * dy * invR3;
+          bodies[i].ax += bodies[j].m * fax;
+          bodies[i].ay += bodies[j].m * fay;
+          bodies[j].ax -= bodies[i].m * fax;
+          bodies[j].ay -= bodies[i].m * fay;
+        }
+      }
+    }
+
+    function energies(){
+      let K=0, U=0;
+      for (let i=0;i<bodies.length;i++){
+        const b=bodies[i];
+        K += 0.5*b.m*(b.vx*b.vx + b.vy*b.vy);
+        for (let j=i+1;j<bodies.length;j++){
+          const c=bodies[j];
+          const dx=c.x-b.x, dy=c.y-b.y; const r = Math.sqrt(dx*dx+dy*dy + eps*eps);
+          U += -Gc * b.m * c.m / r;
+        }
+      }
+      return {K,U};
+    }
+
+    function virialise(target, blend){
+      const e=energies();
+      if (e.K<=0 || e.U>=0) return;
+      const Kd = 0.5*target*Math.abs(e.U);
+      const s = Math.sqrt(Kd/Math.max(1e-12, e.K));
+      const a = Math.max(0, Math.min(1, blend));
+      for (let i=0;i<bodies.length;i++){
+        bodies[i].vx = (1-a)*bodies[i].vx + a*s*bodies[i].vx;
+        bodies[i].vy = (1-a)*bodies[i].vy + a*s*bodies[i].vy;
+      }
+    }
+
+    function circulariseApprox(k=1.0){
+      const cm = computeCM();
+      for (let i=0;i<bodies.length;i++){
+        const b=bodies[i];
+        const rx=b.x-cm.cx, ry=b.y-cm.cy; const r=Math.hypot(rx,ry)+1e-6;
+        const M = cm.M;
+        const vmag = k*Math.sqrt(Math.max(0, Gc * M / r));
+        const ux = -ry/r, uy = rx/r; // +90Â°
+        b.vx = vmag*ux; b.vy = vmag*uy;
+      }
+      zeroCMVelocity();
+    }
+
+    // ---------- integration ----------
+    let lockCMFlag = true;
+    function step(){
+      const h = dt;
+      for (let s=0;s<bodies.length;s++){
+        const bb = bodies[s];
+        bb.x += bb.vx*h + 0.5*bb.ax*h*h;
+        bb.y += bb.vy*h + 0.5*bb.ay*h*h;
+      }
+      const axOld = bodies.map(b=>b.ax);
+      const ayOld = bodies.map(b=>b.ay);
+      computeAccelerations();
+      for (let t=0;t<3;t++){
+        bodies[t].vx += 0.5*(axOld[t] + bodies[t].ax)*h;
+        bodies[t].vy += 0.5*(ayOld[t] + bodies[t].ay)*h;
+        const damp = Math.max(0, 1 - dampPct/100);
+        bodies[t].vx *= damp;
+        bodies[t].vy *= damp;
+      }
+      if (lockCMFlag){ zeroCMVelocity(); }
+    }
+
+    // ---------- camera (autoâ€‘fit to include all bodies) ----------
+    function updateCamera(){
+      const cm = computeCM();
+      // center target: global CM or specific body
+      if (cam.target === 'cm' || cam.target == null) {
+        cam.cx = cm.cx; cam.cy = cm.cy;
+      } else {
+        const idx = Math.max(0, Math.min(2, cam.target|0));
+        cam.cx = bodies[idx].x; cam.cy = bodies[idx].y;
+      }
+      // fit all bodies in view for scaling
+      let R = 10; // avoid div by zero
+      for (let i=0;i<bodies.length;i++){
+        const b=bodies[i];
+        // distance measured from current camera center
+        const d = Math.hypot(b.x - cam.cx, b.y - cam.cy);
+        if (d>R) R=d;
+      }
+      const pad = 1.2; // 20% padding
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      const targetPxPerUnit = Math.min(w, h) / (2*R*pad);
+      const autoScale = Math.max(0.05, Math.min(5, targetPxPerUnit));
+      cam.scalePx = autoScale * userZoomMul; // user multiplier
+    }
+
+    // worldâ†’screen using camera
+    function worldToCanvas(x, y){
+      const cx = canvas.clientWidth/2 + (x - cam.cx) * cam.scalePx;
+      const cy = canvas.clientHeight/2 - (y - cam.cy) * cam.scalePx;
+      return [cx, cy];
+    }
+
+    function bodyRadiusPx(b){ return Math.max(3, Math.min(10, Math.sqrt(b.m))); }
+
+    // ---------- particles (visual flashes on overlap) ----------
+    function spawnExplosion(x, y, totalMass, relSpeed){
+      const base = Math.round(totalMass/6); // subtle: fewer particles
+      const count = Math.max(12, Math.min(160, base));
+      const speedScale = 0.6 + Math.min(1.6, Math.max(0.2, relSpeed/20));
+      for (let n=0;n<count;n++){
+        const ang = Math.random()*Math.PI*2;
+        const spd = (Math.random()*2 + 0.5) * speedScale * 0.1; // half the previous spread radius
+        particles.push({ x:x, y:y, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd, life: 1, size: 1.5 + Math.random()*2.0, hue: 48 });
+      }
+      // softer core flashes
+      particles.push({x:x,y:y,vx:0,vy:0,life:1, size:12, hue:55});
+      particles.push({x:x,y:y,vx:0,vy:0,life:1, size:18, hue:50});
+    }
+
+    const pairKey = (i,j)=> i<j ? (i+"-"+j) : (j+"-"+i);
+    function handleBodyContacts(){
+      for (let i=0;i<3;i++){
+        for (let j=i+1;j<3;j++){
+          const bi = bodies[i], bj = bodies[j];
+          const dx = bj.x - bi.x, dy = bj.y - bi.y;
+          const d2 = dx*dx + dy*dy;
+          const sumR = (bodyRadiusPx(bi) + bodyRadiusPx(bj)) / cam.scalePx; // approx world radii
+          const overlapped = d2 <= sumR*sumR;
+          const key = pairKey(i,j);
+          if (overlapped){
+            if (!activeOverlaps.has(key)){
+              const relSpeed = Math.hypot(bi.vx-bj.vx, bi.vy-bj.vy);
+              const cx = (bi.x + bj.x)/2, cy = (bi.y + bj.y)/2;
+              spawnExplosion(cx, cy, bi.m + bj.m, relSpeed);
+              activeOverlaps.add(key);
+            }
+          } else if (activeOverlaps.has(key)){
+            activeOverlaps.delete(key);
+          }
+        }
+      }
+    }
+
+    function updateParticles(){
+      const drag = 0.985;
+      for (let p=particles.length-1; p>=0; p--){
+        const q = particles[p];
+        q.x += q.vx; q.y += q.vy;
+        q.vx *= drag; q.vy *= drag;
+        q.life -= 0.025; if (q.life <= 0) particles.splice(p,1);
+      }
+    }
+
+    function drawParticles(){
+      if (!particles.length) return;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let p=0;p<particles.length;p++){
+        const q = particles[p];
+        const a = Math.max(0, q.life);
+        const r = q.size * (0.45 + 0.55*a); // subtle: smaller radius
+        const c = worldToCanvas(q.x, q.y);
+        const grd = ctx.createRadialGradient(c[0],c[1],0, c[0],c[1], r);
+        // blueâ€‘white, toned down
+        const innerA = Math.min(0.85, 0.75*a);
+        grd.addColorStop(0, 'rgba(245,250,255,'+innerA+')');
+        grd.addColorStop(0.35, 'rgba(210,230,255,'+(0.35*a)+')');
+        grd.addColorStop(1, 'rgba(160,190,255,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(c[0],c[1], r, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // ---------- rendering (fiery trails + star glows) ----------
+    function starPalette(m){
+      const min=1, max=200; const t = Math.max(0, Math.min(1, (m-min)/(max-min)));
+      // numeric RGB bases to avoid string surgery
+      let coreRGB, midRGBA, haloRGBA, trailRGB;
+      if (t < 0.5){
+        const u = t/0.5;
+        coreRGB = [255, 150+Math.round(80*u), Math.round(80*u)];
+        midRGBA  = [255, 120+Math.round(110*u), Math.round(30+70*u), 0.6];
+        haloRGBA = [255, 80+Math.round(150*u), Math.round(20+60*u), 0.25];
+        trailRGB = [255, 120+Math.round(100*u), Math.round(40+60*u)];
+      } else {
+        const u = (t-0.5)/0.5;
+        coreRGB = [255, 230+Math.round(25*u), Math.round(180+75*u)];
+        midRGBA  = [255, 220+Math.round(35*u), Math.round(150+90*u), 0.55];
+        haloRGBA = [255, 200+Math.round(55*u), Math.round(120+110*u), 0.22];
+        trailRGB = [255, 210+Math.round(45*u), Math.round(130+100*u)];
+      }
+      return {
+        core: `rgba(${coreRGB[0]}, ${coreRGB[1]}, ${coreRGB[2]}, 1)`,
+        mid: `rgba(${midRGBA[0]}, ${midRGBA[1]}, ${midRGBA[2]}, ${midRGBA[3]})`,
+        halo:`rgba(${haloRGBA[0]}, ${haloRGBA[1]}, ${haloRGBA[2]}, ${haloRGBA[3]})`,
+        trailRGB
+      };
+    }
+
+    function drawFieryTrail(b){
+      if (b.trail.length<2) return;
+      const pal = starPalette(b.m);
+      const maxW = Math.max(2, Math.min(8, Math.sqrt(b.m)));
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      const n = b.trail.length;
+      for (let i=1;i<n;i++){
+        const p0 = b.trail[i-1];
+        const p1 = b.trail[i];
+        const proximity = i/(n-1); // 0 tail â†’ 1 head
+        const w = 0.5 + maxW*(0.2 + 0.8*proximity);
+        const a = 0.05 + 0.55*proximity; // brighter near head
+        const col = `rgba(${pal.trailRGB[0]}, ${pal.trailRGB[1]}, ${pal.trailRGB[2]}, ${a.toFixed(3)})`;
+        const c0 = worldToCanvas(p0.x,p0.y);
+        const c1 = worldToCanvas(p1.x,p1.y);
+        ctx.beginPath(); ctx.strokeStyle = col; ctx.lineWidth = w;
+        ctx.moveTo(c0[0],c0[1]); ctx.lineTo(c1[0],c1[1]); ctx.stroke();
+        if (i%10===0){
+          const fx = c1[0], fy = c1[1];
+          const fr = Math.max(6, maxW*(1.2+1.6*proximity));
+          const g = ctx.createRadialGradient(fx,fy,0, fx,fy, fr);
+          g.addColorStop(0, pal.mid);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(fx,fy,fr,0,Math.PI*2); ctx.fill();
+        }
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    function drawStarAt(cx, cy, m){
+      const rCore = Math.max(3, Math.min(10, Math.sqrt(m)));
+      const pal = starPalette(m);
+      ctx.globalCompositeOperation = 'lighter';
+      let R = rCore*3.2;
+      let g = ctx.createRadialGradient(cx,cy,0, cx,cy, R);
+      g.addColorStop(0, pal.halo); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill();
+      R = rCore*2.0; g = ctx.createRadialGradient(cx,cy,0, cx,cy, R);
+      g.addColorStop(0, pal.mid); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = pal.core; ctx.beginPath(); ctx.arc(cx, cy, rCore, 0, Math.PI*2); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    function drawBackground(){
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0,0,canvas.clientWidth, canvas.clientHeight);
+      for (let si=0; si<stars.length; si++){
+        const sObj = stars[si];
+        ctx.globalAlpha = sObj.a; ctx.beginPath(); ctx.fillStyle = '#fff';
+        ctx.arc(sObj.x, sObj.y, sObj.r, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function draw(){
+      drawBackground();
+      // trails
+      for (let bi=0; bi<bodies.length; bi++) drawFieryTrail(bodies[bi]);
+      // bodies
+      for (let bj=0; bj<bodies.length; bj++){
+        const b = bodies[bj];
+        const cxy = worldToCanvas(b.x, b.y);
+        drawStarAt(cxy[0], cxy[1], b.m);
+      }
+      // particle flashes
+      drawParticles();
+    }
+
+    function updateReadout(){
+      const cm = computeCM();
+      const r = $('readouts');
+      r.innerHTML = [
+        ...bodies.map((b,i)=>`<span>B${i+1} m=${fmt(b.m)}</span><span>x=${fmt(b.x)}</span><span>y=${fmt(b.y)}</span><span>|v|=${fmt(Math.hypot(b.vx,b.vy))}</span>`),
+        `<span>CM x=${fmt(cm.cx)}</span>`,
+        `<span>CM y=${fmt(cm.cy)}</span>`,
+        `<span>zoom=${fmt(cam.scalePx)}</span>`
+      ].join('');
+    }
+
+    // ---------- loop ----------
+    function loop(){
+      step();
+      for (let li=0; li<bodies.length; li++){
+        bodies[li].trail.push({x:bodies[li].x,y:bodies[li].y});
+        if (bodies[li].trail.length>trailMax) bodies[li].trail.shift();
+      }
+      handleBodyContacts();
+      updateParticles();
+      updateCamera();
+      draw();
+      updateReadout();
+      rafId = window.requestAnimationFrame(loop);
+    }
+
+    function playToggle(){
+      running = !running;
+      const playBtn = $('play'); if (playBtn) playBtn.textContent = running ? 'Pause' : 'Play';
+      const overlayPlayBtn = $('overlayPlay'); if (overlayPlayBtn) overlayPlayBtn.textContent = running ? 'Pause' : 'Play';
+      if (running){ cancelAnimationFrame(rafId); rafId = requestAnimationFrame(loop); }
+      else { cancelAnimationFrame(rafId); }
+    }
+
+    // ---------- randomiser ----------
+    const randRange = (min,max)=> Math.random()*(max-min)+min;
+    // Seeded RNG helpers (xmur3 hash -> sfc32 PRNG)
+    function xmur3(str){
+      let h=1779033703^str.length; for(let i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19;} return function(){ h=Math.imul(h^h>>>16,2246822507); h=Math.imul(h^h>>>13,3266489909); return (h^h>>>16)>>>0; } }
+    function sfc32(a,b,c,d){ return function(){ a>>>0;b>>>0;c>>>0;d>>>0; let t=(a+b)|0; a=b^b>>>9; b=(c+(c<<3))|0; c=(c<<21|c>>>11); d=(d+1)|0; t=(t+d)|0; c=(c+t)|0; return (c>>>0)/4294967296; } }
+    function seededRand(seed){ const h=xmur3(seed); return sfc32(h(),h(),h(),h()); }
+    function randRangeSeeded(rng,min,max){ return rng()*(max-min)+min; }
+    function getActiveSeed(){ const v=$('seedInput')?.value?.trim(); return v&&v.length? v : null; }
+    function setCurrentSeedDisplay(s){ const el=$('seedDisplay'); if(el) el.textContent=s||''; }
+    function ensureSeed(){ let s=getActiveSeed(); if(!s){ s = (Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36)).toUpperCase(); const input=$('seedInput'); if(input) input.value=s; } setCurrentSeedDisplay(s); return s; }
+    function randomiseFromSeed(seed){ const rng=seededRand(String(seed));
+      for (let i=0;i<3;i++){
+        if (sliders.m[i]) sliders.m[i].value = Math.round(randRangeSeeded(rng,5,150));
+        if (sliders.x[i]) sliders.x[i].value = Math.round(randRangeSeeded(rng,-320,320));
+        if (sliders.y[i]) sliders.y[i].value = Math.round(randRangeSeeded(rng,-240,240));
+      }
+      syncSliderOutputs();
+      spawnFromUI();
+      const vmax = 10;
+      for (let i=0;i<bodies.length;i++){
+        bodies[i].vx = randRangeSeeded(rng,-vmax, vmax);
+        bodies[i].vy = randRangeSeeded(rng,-vmax, vmax);
+      }
+      resetTrails(); setCurrentSeedDisplay(seed); draw(); updateReadout();
+    }
+    function syncSliderOutputs(){
+      for (let i=0;i<3;i++){
+        if(outputs.m[i]) outputs.m[i].textContent = sliders.m[i]?.value ?? '';
+        if(outputs.x[i]) outputs.x[i].textContent = sliders.x[i]?.value ?? '';
+        if(outputs.y[i]) outputs.y[i].textContent = sliders.y[i]?.value ?? '';
+      }
+      if ($('dtVal')) $('dtVal').textContent = $('dt')?.value ?? '';
+      if ($('scaleVal')) $('scaleVal').textContent = $('scale')?.value ?? '';
+      if ($('softVal')) $('softVal').textContent = $('soft')?.value ?? '';
+      if ($('trailVal')) $('trailVal').textContent = $('trailLen')?.value ?? '';
+      if ($('gravVal')) $('gravVal').textContent = $('grav')?.value ?? '';
+      if ($('dampVal')) $('dampVal').textContent = $('damp')?.value ?? '';
+    }
+    function randomiseAll(){
+      // Always generate a brand-new seed, override the input/display, and apply it
+      const seed = (Date.now().toString(36) + Math.floor(Math.random()*1e6).toString(36)).toUpperCase();
+      const input = $('seedInput');
+      if (input) input.value = seed;
+      setCurrentSeedDisplay(seed);
+      randomiseFromSeed(seed);
+    }
+
+    // ---------- spawn / wiring ----------
+    function resetTrails(){ bodies.forEach(b=> b.trail.length=0 ); }
+
+    function spawnFromUI(){
+      dt = parseFloat($('dt')?.value ?? dt);
+      eps = parseFloat($('soft')?.value ?? eps);
+      trailMax = parseInt($('trailLen')?.value ?? trailMax,10);
+      Gc = parseFloat($('grav')?.value ?? Gc);
+      dampPct = parseFloat($('damp')?.value ?? dampPct);
+      userZoomMul = parseFloat($('scale')?.value ?? userZoomMul);
+
+      bodies = [0,1,2].map(i=>({
+        x: parseFloat(sliders.x[i]?.value ?? 0),
+        y: parseFloat(sliders.y[i]?.value ?? 0),
+        vx: 0, vy: 0,
+        ax: 0, ay: 0,
+        m: parseFloat(sliders.m[i]?.value ?? 10),
+        trail: []
+      }));
+      resetTrails();
+      computeAccelerations();
+      updateCamera();
+      draw();
+      updateReadout();
+    }
+
+    // ---------- controls ----------
+    // Canvas double-click to refocus camera
+    function canvasToLocal(evt){
+      const rect = canvas.getBoundingClientRect();
+      return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+    }
+    if (canvas){
+      canvas.addEventListener('dblclick', (evt)=>{
+        const p = canvasToLocal(evt);
+        // hit test in screen-space against rendered body radii
+        let picked = -1; let best = 1e9;
+        for (let i=0;i<bodies.length;i++){
+          const b = bodies[i];
+          const [sx,sy] = worldToCanvas(b.x,b.y);
+          const r = bodyRadiusPx(b) + 6; // tolerance
+          const d = Math.hypot(p.x - sx, p.y - sy);
+          if (d < r && d < best){ picked = i; best = d; }
+        }
+        if (picked >= 0){
+          // Double-click on a body: focus that body and set zoom modifier to 3
+          cam.target = picked;
+          userZoomMul = 3;
+          const scaleEl = $('scale');
+          if (scaleEl) scaleEl.value = String(userZoomMul);
+          if ($('scaleVal')) $('scaleVal').textContent = String(userZoomMul);
+        } else {
+          // Double-click on empty space: recenter to barycentre and reset zoom to 1
+          cam.target = 'cm';
+          userZoomMul = 1;
+          const scaleEl = $('scale');
+          if (scaleEl) scaleEl.value = String(userZoomMul);
+          if ($('scaleVal')) $('scaleVal').textContent = String(userZoomMul);
+        }
+        updateCamera(); draw(); updateReadout();
+      });
+    }
+
+    addL('apply','click', spawnFromUI);
+    addL('play','click', playToggle);
+    addL('runSeed','click', ()=>{ const s=getActiveSeed(); if (s) randomiseFromSeed(s); else { const ns = ensureSeed(); randomiseFromSeed(ns); } });
+    addL('clear','click', ()=>{ ctx.clearRect(0,0,canvas.clientWidth, canvas.clientHeight); resetTrails(); draw(); });
+    addL('rand','click', randomiseAll);
+    addL('overlayRand','click', randomiseAll);
+    addL('overlayRunSeed','click', ()=>{ const s=getActiveSeed(); if (s) randomiseFromSeed(s); else { const ns = ensureSeed(); randomiseFromSeed(ns); } });
+    addL('overlayPlay','click', playToggle);
+    // Seed input events: Enter applies; input change also applies for convenience
+    const seedInputEl = document.getElementById('seedInput');
+    if (seedInputEl){
+      seedInputEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); const s=getActiveSeed(); if(s) randomiseFromSeed(s); }});
+      seedInputEl.addEventListener('change', ()=>{ const s=getActiveSeed(); if(s) randomiseFromSeed(s); });
+    }
+    addL('copySeed','click', async ()=>{ const s=getActiveSeed(); if(!s) return; try{ await navigator.clipboard.writeText(s);}catch(_){ /* ignore */ }});
+    addL('lockCM','change', (e)=>{ lockCMFlag = e.target.checked; if (lockCMFlag){ zeroCMVelocity(); }});
+    addL('virial','input', ()=>{ if($('virialVal')) $('virialVal').textContent=$('virial')?.value ?? ''; });
+    addL('bindBlend','input', ()=>{ if($('bindBlendVal')) $('bindBlendVal').textContent=$('bindBlend')?.value ?? ''; });
+    addL('grav','input', ()=>{ if($('gravVal')) $('gravVal').textContent = $('grav')?.value ?? ''; });
+    addL('damp','input', ()=>{ if($('dampVal')) $('dampVal').textContent = $('damp')?.value ?? ''; });
+    addL('scale','input', ()=>{ userZoomMul = parseFloat($('scale')?.value ?? userZoomMul); if($('scaleVal')) $('scaleVal').textContent=userZoomMul; updateCamera(); draw(); });
+
+    // --- UI hide/show + fullscreen with 'g' ---
+    function toggleUIDisplay(){
+      const goingHide = !document.body.classList.contains('hide-ui');
+      document.body.classList.toggle('hide-ui');
+      if (goingHide){
+        const el = document.documentElement;
+        if (!document.fullscreenElement && el.requestFullscreen){
+          el.requestFullscreen().catch(()=>{});
+        }
+      } else {
+        if (document.fullscreenElement && document.exitFullscreen){
+          document.exitFullscreen().catch(()=>{});
+        }
+      }
+      // re-measure canvas after layout/FS change
+      requestResize();
+    }
+    document.addEventListener('keydown', (e)=>{
+      const tag = (e.target && e.target.tagName) || '';
+      const isFormEl = /INPUT|TEXTAREA|SELECT|BUTTON/.test(tag);
+      const k = e.key || '';
+      const code = e.code || '';
+      if (!isFormEl && k.toLowerCase() === 'g') { e.preventDefault(); toggleUIDisplay(); }
+      // Spacebar â†’ randomise all bodies (|vx|,|vy| â‰¤ 10)
+      if (!isFormEl && (k === ' ' || k === 'Spacebar' || code === 'Space')) { e.preventDefault(); randomiseAll(); }
+    });
+    document.addEventListener('fullscreenchange', requestResize);
+
+   
+
+    // quick sanity: required nodes exist
+    console.assert(document.getElementById('sim'), 'canvas #sim must exist');
+
+    // ---------- selfâ€‘tests ----------
+    (function selfTest_basic(){
+      bodies = [
+        {x:-100,y:0,vx:0,vy:0,ax:0,ay:0,m:20,trail:[]},
+        {x:100,y:0,vx:0,vy:0,ax:0,ay:0,m:20,trail:[]},
+        {x:0,y:160,vx:0,vy:0,ax:0,ay:0,m:5,trail:[]}
+      ];
+      computeAccelerations();
+      console.assert(isFinite(bodies[0].ax) && isFinite(bodies[0].ay), 'acc should be finite');
+      const x0=bodies[0].x; step(); console.assert(bodies[0].x!==x0, 'position should update');
+      spawnFromUI();
+    })();
+
+    (function selfTest_cameraFit(){
+      spawnFromUI();
+      // place bodies widely
+      bodies[0].x=-500; bodies[0].y=0; bodies[1].x=500; bodies[1].y=0; bodies[2].x=0; bodies[2].y=400;
+      updateCamera();
+      const pts = bodies.map(b=> worldToCanvas(b.x,b.y));
+      const within = pts.every(p=> p[0]>=0 && p[0]<=canvas.clientWidth && p[1]>=0 && p[1]<=canvas.clientHeight);
+      console.assert(within, 'auto camera should keep all bodies on-screen');
+      console.assert(cam.scalePx>0, 'scale should be positive');
+      spawnFromUI();
+    })();
+
+    (function selfTest_damping(){
+      const saveG = Gc, saveD = dampPct; Gc = 0; dampPct = 2.0;
+      bodies = [
+        {x:0,y:0,vx:5,vy:0,ax:0,ay:0,m:10,trail:[]},
+        {x:50,y:0,vx:-3,vy:0,ax:0,ay:0,m:10,trail:[]},
+        {x:0,y:50,vx:0,vy:-4,ax:0,ay:0,m:10,trail:[]}
+      ];
+      const k0 = bodies.reduce((s,b)=> s + 0.5*b.m*(b.vx*b.vx+b.vy*b.vy), 0);
+      for (let k=0;k<10;k++) step();
+      const k1 = bodies.reduce((s,b)=> s + 0.5*b.m*(b.vx*b.vx+b.vy*b.vy), 0);
+      console.assert(k1 < k0, 'damping reduces KE');
+      Gc = saveG; dampPct = saveD; spawnFromUI();
+    })();
+
+    (function selfTest_virial(){
+      spawnFromUI();
+      bodies[0].vx=5; bodies[1].vy=-3; bodies[2].vx=-2; bodies[2].vy=1;
+      const before = energies();
+      virialise(1.0, 1.0);
+      const after = energies();
+      const vBefore = (2*before.K)/Math.abs(before.U||1);
+      const vAfter  = (2*after.K)/Math.abs(after.U||1);
+      console.assert(Math.abs(vAfter-1.0) <= Math.abs(vBefore-1.0)+1e-6, 'virialise moves 2K/|U| toward target');
+      spawnFromUI();
+    })();
+
+    (function selfTest_focus(){
+      // Verify camera centers on body when targeted
+      spawnFromUI();
+      cam.target = 1; updateCamera();
+      console.assert(Math.abs(cam.cx - bodies[1].x) < 1e-6 && Math.abs(cam.cy - bodies[1].y) < 1e-6, 'camera should center on targeted body');
+      cam.target = 'cm'; updateCamera();
+      const cm=computeCM();
+      console.assert(Math.abs(cam.cx - cm.cx) < 1e-6, 'camera should center on CM when target is cm');
+      spawnFromUI();
+    })();
+
+    (function selfTest_uiToggle(){
+      const had = document.body.classList.contains('hide-ui');
+      document.body.classList.toggle('hide-ui');
+      console.assert(document.body.classList.contains('hide-ui') !== had, 'G toggle should flip class');
+      document.body.classList.toggle('hide-ui');
+    })();
+
+    (function selfTest_randomise(){
+      // Capture before â†’ randomise â†’ validate ranges and velocity cap
+      spawnFromUI();
+      const before = bodies.map(b=>({m:b.m,x:b.x,y:b.y}));
+      randomiseAll();
+      const changed = bodies.some((b,i)=> b.m!==before[i].m || b.x!==before[i].x || b.y!==before[i].y);
+      const capped = bodies.every(b=> Math.abs(b.vx) <= 10.0001 && Math.abs(b.vy) <= 10.0001);
+      console.assert(changed, 'randomise should change mass/positions');
+      console.assert(capped, 'randomise velocity components must be â‰¤ 10');
+      spawnFromUI();
+    })();
+
+    // initial
+    spawnFromUI();
+    updateCamera();
+    draw();
+
+    // Auto-start: hide UI (already via body class), attempt fullscreen, randomise & play
+    (function initAuto(){
+      try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen().catch(()=>{}); } } catch(_){ }
+      const seed = ensureSeed();
+      randomiseFromSeed(seed);
+      if (!running) playToggle();
+      cam.target = 'cm';
+      updateCamera();
+    })();
+  });
+  </script>
+</body>
+</html>
