@@ -21,7 +21,7 @@
     input[type="range"]{width:100%}
     .controls{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
     @media (max-width: 420px){.controls{grid-template-columns:1fr 1fr}}
-    /* Modern sciâ€‘fi button system */
+    /* Modern sci‑fi button system */
     button,.btn{appearance:none;position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--btn-border);background:var(--btn-bg);color:var(--btn-text);font-weight:700;letter-spacing:.3px;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.35),0 0 0 0 rgba(124,199,255,0),inset 0 0 0 1px rgba(255,255,255,.06);transition:transform .12s ease,filter .2s ease,box-shadow .25s ease,background .25s ease;font-family:"Futura","Futura PT","Avenir Next","Avenir","Montserrat","Poppins","Century Gothic","Tw Cen MT","Segoe UI","Helvetica Neue",Arial,sans-serif}
     /* sheen */
     button::after,.btn::after{content:"";position:absolute;inset:0;border-radius:inherit;background:radial-gradient(120% 80% at 10% 0%,rgba(255,255,255,.12),transparent 40%);pointer-events:none;mix-blend-mode:screen}
@@ -173,7 +173,7 @@ main.panel{ background:#000; }
           <input type="range" min="0" max="5" step="0.01" value="0.01" id="damp">
         </div>
         <div class="row">
-          <label for="soft">Softening Îµ: <b id="softVal">7</b></label>
+          <label for="soft">Softening ε: <b id="softVal">7</b></label>
           <input type="range" min="0" max="20" step="1" value="10" id="soft">
         </div>
         <div class="row">
@@ -289,7 +289,7 @@ main.panel{ background:#000; }
     }
     window.addEventListener('resize', requestResize);
 
-    // star field (screenâ€‘space so it doesn't parallax with camera)
+    // star field (screen‑space so it doesn't parallax with camera)
     let stars = [];
     function makeStars(w, h){
       const sw = w ?? canvas.clientWidth;
@@ -319,12 +319,27 @@ main.panel{ background:#000; }
     let bodies = [];
     let running = false;
     let rafId = null;
+    let plasmaTime = 0; // time accumulator for plasma turbulence
 
-    // camera (autoâ€‘fit)
+    // camera (auto‑fit)
     const cam = { cx:0, cy:0, scalePx:1, target:'cm' };
 
-    // particles for overlap flashes (visual only)
+    // visual perspective sizing (fixed defaults, no UI)
+    const persp = {
+      enabled: true,
+      strength: 1.2, // falloff amount (fixed); higher = stronger
+      min: 0.1,      // clamp to avoid tiny stars
+      max: 1.2       // clamp to avoid overgrowth
+    };
+
+    // particles: stylized plasma bursts
     let particles = [];
+    const MAX_PARTICLES = 200; // global cap to match perf target
+    const FLUID_EMIT_COUNT = 30; // total particles per collision (split across bodies)
+    const EJECT_VEL_MUL = 17; // plasma ejection velocity multiplier
+    const PARTICLE_GRAVITY_SCALE = 0.5; // damp gravity for plasma only
+    const PARTICLE_LIFE_SCALE = 5.0;    // >1.0 = longer life, <1.0 = shorter
+    const FLUID_SPAWN_MUL = 3.0; // stronger fluid amount
     const activeOverlaps = new Set();
 
     // ---------- physics helpers ----------
@@ -387,7 +402,7 @@ main.panel{ background:#000; }
         const rx=b.x-cm.cx, ry=b.y-cm.cy; const r=Math.hypot(rx,ry)+1e-6;
         const M = cm.M;
         const vmag = k*Math.sqrt(Math.max(0, Gc * M / r));
-        const ux = -ry/r, uy = rx/r; // +90Â°
+        const ux = -ry/r, uy = rx/r; // +90°
         b.vx = vmag*ux; b.vy = vmag*uy;
       }
       zeroCMVelocity();
@@ -415,7 +430,7 @@ main.panel{ background:#000; }
       if (lockCMFlag){ zeroCMVelocity(); }
     }
 
-    // ---------- camera (autoâ€‘fit to include all bodies) ----------
+    // ---------- camera (auto‑fit to include all bodies) ----------
     function updateCamera(){
       const cm = computeCM();
       // center target: global CM or specific body
@@ -440,7 +455,7 @@ main.panel{ background:#000; }
       cam.scalePx = autoScale * userZoomMul; // user multiplier
     }
 
-    // worldâ†’screen using camera
+    // world→screen using camera
     function worldToCanvas(x, y){
       const cx = canvas.clientWidth/2 + (x - cam.cx) * cam.scalePx;
       const cy = canvas.clientHeight/2 - (y - cam.cy) * cam.scalePx;
@@ -449,36 +464,87 @@ main.panel{ background:#000; }
 
     function bodyRadiusPx(b){ return Math.max(3, Math.min(10, Math.sqrt(b.m))); }
 
-    // ---------- particles (visual flashes on overlap) ----------
-    function spawnExplosion(x, y, totalMass, relSpeed){
-      const base = Math.round(totalMass/6); // subtle: fewer particles
-      const count = Math.max(12, Math.min(160, base));
-      const speedScale = 0.6 + Math.min(1.6, Math.max(0.2, relSpeed/20));
-      for (let n=0;n<count;n++){
-        const ang = Math.random()*Math.PI*2;
-        const spd = (Math.random()*2 + 0.5) * speedScale * 0.1; // half the previous spread radius
-        particles.push({ x:x, y:y, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd, life: 1, size: 1.5 + Math.random()*2.0, hue: 48 });
+    // ---------- particles (plasma fluid on overlap) ----------
+    function emitFluidBurst(x, y, dirx, diry, totalMass, zeroG, relSpeed=0, addvx=0, addvy=0, countOverride, emitterIdx){
+      const base = Math.max(1, Math.min(FLUID_EMIT_COUNT, countOverride ?? Math.floor(FLUID_EMIT_COUNT/2)));
+      const dirLen = Math.hypot(dirx, diry) || 1;
+      const ux = dirx/dirLen, uy = diry/dirLen;
+      const headSpeed = 1.0 * (1 + Math.min(1.5, relSpeed/15));
+      const baseAngle = Math.atan2(uy, ux);
+      // Dynamic fan for ripped-surface look: mostly narrow core toward the other body,
+      // occasionally wide shredded sheet
+      const coreFan = Math.PI * (0.25 + 0.30*Math.random());  // ~45°..~90°
+      const wideFan = Math.PI * (0.75 + 0.25*Math.random());  // ~135°..~180°
+      const useWide = Math.random() < 0.3; // 30% of particles use wide sheet
+      const fanAngle = useWide ? wideFan : coreFan;
+      const skew = (Math.random()-0.5) * fanAngle * (useWide ? 0.15 : 0.05);
+      // edgeBias>1 favors center (rope), <1 favors edges (shreds)
+      const edgeBias = useWide ? (0.4 + Math.random()*0.4) : (1.4 + Math.random()*0.8);
+      for (let n=0; n<base; n++){
+        // Angle sampling with edge bias and per-particle micro jitter
+        const sign = (Math.random() < 0.5) ? -1 : 1;
+        const off = (fanAngle*0.5) * Math.pow(Math.random(), edgeBias) * sign;
+        const jitterAng = (Math.random()-0.5) * 0.06; // tiny extra jitter
+        const ang = baseAngle + skew + off + jitterAng;
+        const spread = (Math.random()*1.0 + 0.2);
+        const spd = headSpeed * spread * EJECT_VEL_MUL;
+        const nx = Math.cos(ang), ny = Math.sin(ang);
+        const noiseAmp = 0.06 * (0.6 + 0.4*Math.random());
+        const vx = nx*spd + Math.cos(n*0.31 + Math.random()*0.6)*noiseAmp + addvx;
+        const vy = ny*spd + Math.sin(n*0.29 + Math.random()*0.6)*noiseAmp + addvy;
+        if (particles.length < MAX_PARTICLES) {
+          const size = 1.0 + 4.0*Math.pow(Math.random(), 0.35);
+          particles.push({ x, y, vx, vy, life: 1, size, zeroG: false, emitter: emitterIdx });
+        }
       }
-      // softer core flashes
-      particles.push({x:x,y:y,vx:0,vy:0,life:1, size:12, hue:55});
-      particles.push({x:x,y:y,vx:0,vy:0,life:1, size:18, hue:50});
+    }
+
+    function spawnFluidAtCollision(x1, y1, d1x, d1y, x2, y2, d2x, d2y, m1, m2, vix, viy, vjx, vjy, idx1, idx2){
+      const relSpeed = Math.hypot(vix - vjx, viy - vjy);
+      // Emit two distinct fans at each body's surface point (gravity-enabled)
+      const perBody = Math.max(1, Math.floor(FLUID_EMIT_COUNT/2));
+      emitFluidBurst(x1, y1, d1x, d1y, m1, false, relSpeed, vix, viy, perBody, idx1);
+      emitFluidBurst(x2, y2, d2x, d2y, m2, false, relSpeed, vjx, vjy, perBody, idx2);
     }
 
     const pairKey = (i,j)=> i<j ? (i+"-"+j) : (j+"-"+i);
     function handleBodyContacts(){
+      // Use perspective-scaled visual radii for contact detection so it matches appearance.
+      // When focused on a body (cam.target !== 'cm'), perspective scaling is disabled by helper.
+      const cm = computeCM();
+      let Rsys = 10;
+      for (let k=0; k<bodies.length; k++){
+        const d = Math.hypot(bodies[k].x - cm.cx, bodies[k].y - cm.cy);
+        if (d > Rsys) Rsys = d;
+      }
+
       for (let i=0;i<3;i++){
         for (let j=i+1;j<3;j++){
           const bi = bodies[i], bj = bodies[j];
           const dx = bj.x - bi.x, dy = bj.y - bi.y;
           const d2 = dx*dx + dy*dy;
-          const sumR = (bodyRadiusPx(bi) + bodyRadiusPx(bj)) / cam.scalePx; // approx world radii
+          const si = perspectiveScaleForBody(bi, i, cm, Rsys);
+          const sj = perspectiveScaleForBody(bj, j, cm, Rsys);
+          const ri = (bodyRadiusPx(bi) * si) / cam.scalePx; // world units
+          const rj = (bodyRadiusPx(bj) * sj) / cam.scalePx; // world units
+          const sumR = ri + rj;
           const overlapped = d2 <= sumR*sumR;
           const key = pairKey(i,j);
           if (overlapped){
             if (!activeOverlaps.has(key)){
-              const relSpeed = Math.hypot(bi.vx-bj.vx, bi.vy-bj.vy);
-              const cx = (bi.x + bj.x)/2, cy = (bi.y + bj.y)/2;
-              spawnExplosion(cx, cy, bi.m + bj.m, relSpeed);
+              const dxn = bj.x - bi.x, dyn = bj.y - bi.y;
+              const dist = Math.hypot(dxn, dyn) || 1;
+              const ex = dxn/dist, ey = dyn/dist; // unit from i->j
+              const ox1 = bi.x + ex*ri, oy1 = bi.y + ey*ri; // surface point on i toward j
+              const ox2 = bj.x - ex*rj, oy2 = bj.y - ey*rj; // surface point on j toward i
+              // Per-body fan directions: align with each parent's velocity; fallback to surface normal
+              const vimag = Math.hypot(bi.vx, bi.vy);
+              const vjmag = Math.hypot(bj.vx, bj.vy);
+              const d1x = (vimag>1e-6? bi.vx/vimag : ex);
+              const d1y = (vimag>1e-6? bi.vy/vimag : ey);
+              const d2x = (vjmag>1e-6? bj.vx/vjmag : -ex);
+              const d2y = (vjmag>1e-6? bj.vy/vjmag : -ey);
+              spawnFluidAtCollision(ox1, oy1, d1x, d1y, ox2, oy2, d2x, d2y, bi.m, bj.m, bi.vx, bi.vy, bj.vx, bj.vy, i, j);
               activeOverlaps.add(key);
             }
           } else if (activeOverlaps.has(key)){
@@ -494,7 +560,7 @@ main.panel{ background:#000; }
         const q = particles[p];
         q.x += q.vx; q.y += q.vy;
         q.vx *= drag; q.vy *= drag;
-        q.life -= 0.025; if (q.life <= 0) particles.splice(p,1);
+        q.life -= (0.025 / PARTICLE_LIFE_SCALE); if (q.life <= 0) particles.splice(p,1);
       }
     }
 
@@ -502,17 +568,138 @@ main.panel{ background:#000; }
       if (!particles.length) return;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.0;
       for (let p=0;p<particles.length;p++){
         const q = particles[p];
         const a = Math.max(0, q.life);
         const r = q.size * (0.45 + 0.55*a); // subtle: smaller radius
         const c = worldToCanvas(q.x, q.y);
         const grd = ctx.createRadialGradient(c[0],c[1],0, c[0],c[1], r);
-        // blueâ€‘white, toned down
+
+    function updateParticlesPlasma(){
+      const h = dt;
+      const drag = 0.992;
+      for (let p=particles.length-1; p>=0; p--){
+        const q = particles[p];
+        if (!q.zeroG){
+          let ax=0, ay=0;
+          for (let i=0;i<bodies.length;i++){
+            const b=bodies[i];
+            const dx=b.x - q.x, dy=b.y - q.y;
+            const r2 = dx*dx + dy*dy + eps*eps;
+            const invR3 = 1/Math.pow(r2, 1.5);
+            ax += Gc * b.m * dx * invR3;
+            ay += Gc * b.m * dy * invR3;
+          }
+          q.vx += ax*h*PARTICLE_GRAVITY_SCALE; q.vy += ay*h*PARTICLE_GRAVITY_SCALE;
+        }
+        q.vx *= drag; q.vy *= drag;
+        q.x += q.vx*h; q.y += q.vy*h;
+        q.life -= (0.02 / PARTICLE_LIFE_SCALE);
+        if (q.life <= 0) { particles.splice(p,1); }
+      }
+      if (particles.length > MAX_PARTICLES){ particles.splice(0, particles.length - MAX_PARTICLES); }
+    }
+
+    function drawParticlesPlasma(){
+      if (!particles.length) return;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const cm = computeCM();
+      let Rsys = 10; for (let i=0;i<bodies.length;i++){ const d=Math.hypot(bodies[i].x-cm.cx,bodies[i].y-cm.cy); if(d>Rsys) Rsys=d; }
+      for (let p=0;p<particles.length;p++){
+        const q = particles[p];
+        const a = Math.max(0, q.life);
+        let scale = 1; if (Number.isInteger(q.emitter) && bodies[q.emitter]){ scale = perspectiveScaleForBody(bodies[q.emitter], q.emitter, cm, Rsys); }
+        const r = q.size * (0.6 + 0.9*a) * scale;
+        const c = worldToCanvas(q.x, q.y);
+        const grd = ctx.createRadialGradient(c[0],c[1],0, c[0],c[1], r);
+        const innerA = Math.min(0.95, 0.85*a);
+        const alphaScale = .5; // target 15% transparency
+        grd.addColorStop(0, 'rgba(255,255,230,'+(innerA*alphaScale)+')');
+        grd.addColorStop(0.35, 'rgba(255,200,90,'+((0.45*a)*alphaScale)+')');
+        grd.addColorStop(1, 'rgba(255,120,0,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(c[0],c[1], r, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+        // blue‑white, toned down
         const innerA = Math.min(0.85, 0.75*a);
         grd.addColorStop(0, 'rgba(245,250,255,'+innerA+')');
         grd.addColorStop(0.35, 'rgba(210,230,255,'+(0.35*a)+')');
         grd.addColorStop(1, 'rgba(160,190,255,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(c[0],c[1], r, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // Top-level plasma particle functions (outer scope)
+    function updateParticlesPlasma(){
+      const h = dt;
+      const drag = 0.985; // slight damping only
+      for (let p=particles.length-1; p>=0; p--){
+        const q = particles[p];
+        // gravity from all bodies
+        let ax=0, ay=0;
+        for (let i=0;i<bodies.length;i++){
+          const b=bodies[i];
+          const dx=b.x - q.x, dy=b.y - q.y;
+          const r2 = dx*dx + dy*dy + eps*eps;
+          const invR3 = 1/Math.pow(r2, 1.5);
+          ax += Gc * b.m * dx * invR3;
+          ay += Gc * b.m * dy * invR3;
+        }
+        q.vx += ax*h*PARTICLE_GRAVITY_SCALE; q.vy += ay*h*PARTICLE_GRAVITY_SCALE;
+        // integrate
+        q.vx *= drag; q.vy *= drag;
+        q.x += q.vx*h; q.y += q.vy*h;
+        // collide with bodies as solid spheres (world radii)
+        for (let i=0;i<bodies.length;i++){
+          const b=bodies[i];
+          const dx=q.x-b.x, dy=q.y-b.y;
+          const r = Math.hypot(dx,dy);
+          const rad = (bodyRadiusPx(b))/cam.scalePx; // approximate world radius
+          if (r < rad && r > 0){
+            const nx = dx/r, ny = dy/r;
+            // push out of surface
+            const penetration = rad - r;
+            q.x += nx * (penetration + 1e-3);
+            q.y += ny * (penetration + 1e-3);
+            // reflect velocity with restitution
+            const vn = q.vx*nx + q.vy*ny;
+            const vtX = q.vx - vn*nx, vtY = q.vy - vn*ny;
+            const restitution = 0.6, friction = 0.9;
+            q.vx = -restitution*vn*nx + friction*vtX;
+            q.vy = -restitution*vn*ny + friction*vtY;
+          }
+        }
+        q.life -= (0.02 / PARTICLE_LIFE_SCALE);
+        if (q.life <= 0) { particles.splice(p,1); }
+      }
+      if (particles.length > MAX_PARTICLES){ particles.splice(0, particles.length - MAX_PARTICLES); }
+    }
+
+    function drawParticlesPlasma(){
+      if (!particles.length) return;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const cm = computeCM();
+      let Rsys = 10; for (let i=0;i<bodies.length;i++){ const d=Math.hypot(bodies[i].x-cm.cx,bodies[i].y-cm.cy); if(d>Rsys) Rsys=d; }
+      for (let p=0;p<particles.length;p++){
+        const q = particles[p];
+        const a = Math.max(0, q.life);
+        let scale = 1; if (Number.isInteger(q.emitter) && bodies[q.emitter]){ scale = perspectiveScaleForBody(bodies[q.emitter], q.emitter, cm, Rsys); }
+        const r = q.size * (1.2 + 1.8*a) * scale;
+        const c = worldToCanvas(q.x, q.y);
+        const grd = ctx.createRadialGradient(c[0],c[1],0, c[0],c[1], r);
+        const innerA = Math.min(1.0, 0.95*a + 0.2);
+        const alphaScale = 0.1; // target 10% transparency
+        grd.addColorStop(0, 'rgba(255,255,235,'+(innerA*alphaScale)+')');
+        grd.addColorStop(0.30, 'rgba(255,210,100,'+((0.65*a)*alphaScale)+')');
+        grd.addColorStop(1, 'rgba(255,130,10,0)');
         ctx.fillStyle = grd;
         ctx.beginPath(); ctx.arc(c[0],c[1], r, 0, Math.PI*2); ctx.fill();
       }
@@ -555,7 +742,7 @@ main.panel{ background:#000; }
       for (let i=1;i<n;i++){
         const p0 = b.trail[i-1];
         const p1 = b.trail[i];
-        const proximity = i/(n-1); // 0 tail â†’ 1 head
+        const proximity = i/(n-1); // 0 tail → 1 head
         const w = 0.5 + maxW*(0.2 + 0.8*proximity);
         const a = 0.05 + 0.55*proximity; // brighter near head
         const col = `rgba(${pal.trailRGB[0]}, ${pal.trailRGB[1]}, ${pal.trailRGB[2]}, ${a.toFixed(3)})`;
@@ -575,8 +762,9 @@ main.panel{ background:#000; }
       ctx.globalCompositeOperation = 'source-over';
     }
 
-    function drawStarAt(cx, cy, m){
-      const rCore = Math.max(3, Math.min(10, Math.sqrt(m)));
+    function drawStarAt(cx, cy, m, scale=1){
+      const rCoreBase = Math.max(3, Math.min(10, Math.sqrt(m)));
+      const rCore = rCoreBase * scale;
       const pal = starPalette(m);
       ctx.globalCompositeOperation = 'lighter';
       let R = rCore*3.2;
@@ -588,6 +776,23 @@ main.panel{ background:#000; }
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill();
       ctx.fillStyle = pal.core; ctx.beginPath(); ctx.arc(cx, cy, rCore, 0, Math.PI*2); ctx.fill();
       ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // Perspective scale based on camera zoom level.
+    // - Smallest sizes at low zoom; grows with zoom.
+    // - When camera is centered on a body, disable the effect entirely.
+    // - Trails and picking remain unaffected.
+    function perspectiveScaleForBody(b, index, cm, Rsys){
+      if (!persp.enabled) return 1;
+      // If focused on any body, turn off perspective sizing globally
+      if (cam.target !== 'cm') return 1;
+      const zMin = 0.05, zMax = 5; // reference zoom bounds
+      const z = cam.scalePx;
+      const zClamped = Math.max(zMin, Math.min(zMax, z));
+      let t = (zClamped - zMin) / (zMax - zMin); // 0 at zMin, 1 at zMax
+      if (persp.strength && persp.strength !== 1) t = Math.pow(t, persp.strength);
+      const s = persp.min + (persp.max - persp.min) * t;
+      return Math.max(persp.min, Math.min(persp.max, s));
     }
 
     function drawBackground(){
@@ -604,16 +809,26 @@ main.panel{ background:#000; }
 
     function draw(){
       drawBackground();
-      // trails
+      // trails (unchanged by perspective sizing)
       for (let bi=0; bi<bodies.length; bi++) drawFieryTrail(bodies[bi]);
-      // bodies
+
+      // Precompute barycentre and system extent for perspective sizing
+      const cm = computeCM();
+      let Rsys = 10;
+      for (let i=0; i<bodies.length; i++){
+        const d = Math.hypot(bodies[i].x - cm.cx, bodies[i].y - cm.cy);
+        if (d > Rsys) Rsys = d;
+      }
+
+      // bodies (apply perspective scaling only to cores/halos)
       for (let bj=0; bj<bodies.length; bj++){
         const b = bodies[bj];
         const cxy = worldToCanvas(b.x, b.y);
-        drawStarAt(cxy[0], cxy[1], b.m);
+        const s = perspectiveScaleForBody(b, bj, cm, Rsys);
+        drawStarAt(cxy[0], cxy[1], b.m, s);
       }
-      // particle flashes
-      drawParticles();
+      // plasma particles
+      drawParticlesPlasma();
     }
 
     function updateReadout(){
@@ -630,12 +845,13 @@ main.panel{ background:#000; }
     // ---------- loop ----------
     function loop(){
       step();
+      plasmaTime += dt;
       for (let li=0; li<bodies.length; li++){
         bodies[li].trail.push({x:bodies[li].x,y:bodies[li].y});
         if (bodies[li].trail.length>trailMax) bodies[li].trail.shift();
       }
       handleBodyContacts();
-      updateParticles();
+      updateParticlesPlasma();
       updateCamera();
       draw();
       updateReadout();
@@ -806,7 +1022,7 @@ main.panel{ background:#000; }
       const k = e.key || '';
       const code = e.code || '';
       if (!isFormEl && k.toLowerCase() === 'g') { e.preventDefault(); toggleUIDisplay(); }
-      // Spacebar â†’ randomise all bodies (|vx|,|vy| â‰¤ 10)
+      // Spacebar → randomise all bodies (|vx|,|vy| ≤ 10)
       if (!isFormEl && (k === ' ' || k === 'Spacebar' || code === 'Space')) { e.preventDefault(); randomiseAll(); }
     });
     document.addEventListener('fullscreenchange', requestResize);
@@ -816,7 +1032,7 @@ main.panel{ background:#000; }
     // quick sanity: required nodes exist
     console.assert(document.getElementById('sim'), 'canvas #sim must exist');
 
-    // ---------- selfâ€‘tests ----------
+    // ---------- self‑tests ----------
     (function selfTest_basic(){
       bodies = [
         {x:-100,y:0,vx:0,vy:0,ax:0,ay:0,m:20,trail:[]},
@@ -886,14 +1102,14 @@ main.panel{ background:#000; }
     })();
 
     (function selfTest_randomise(){
-      // Capture before â†’ randomise â†’ validate ranges and velocity cap
+      // Capture before → randomise → validate ranges and velocity cap
       spawnFromUI();
       const before = bodies.map(b=>({m:b.m,x:b.x,y:b.y}));
       randomiseAll();
       const changed = bodies.some((b,i)=> b.m!==before[i].m || b.x!==before[i].x || b.y!==before[i].y);
       const capped = bodies.every(b=> Math.abs(b.vx) <= 10.0001 && Math.abs(b.vy) <= 10.0001);
       console.assert(changed, 'randomise should change mass/positions');
-      console.assert(capped, 'randomise velocity components must be â‰¤ 10');
+      console.assert(capped, 'randomise velocity components must be ≤ 10');
       spawnFromUI();
     })();
 
@@ -915,3 +1131,5 @@ main.panel{ background:#000; }
   </script>
 </body>
 </html>
+
+
