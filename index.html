@@ -883,14 +883,51 @@ main.panel{ background:#000; }
         if (sliders.x[i]) sliders.x[i].value = Math.round(randRangeSeeded(rng,-320,320));
         if (sliders.y[i]) sliders.y[i].value = Math.round(randRangeSeeded(rng,-240,240));
       }
+      biasRandomPositionsTowardCM();
       syncSliderOutputs();
       spawnFromUI();
+      const vmin = 4;
       const vmax = 10;
       for (let i=0;i<bodies.length;i++){
-        bodies[i].vx = randRangeSeeded(rng,-vmax, vmax);
-        bodies[i].vy = randRangeSeeded(rng,-vmax, vmax);
+        const speed = randRangeSeeded(rng, vmin, vmax);
+        const angle = randRangeSeeded(rng, 0, Math.PI * 2);
+        bodies[i].vx = Math.cos(angle) * speed;
+        bodies[i].vy = Math.sin(angle) * speed;
       }
       resetTrails(); setCurrentSeedDisplay(seed); draw(); updateReadout();
+    }
+    function biasRandomPositionsTowardCM(biasFactor = 0.6){
+      const masses = [];
+      const xs = [];
+      const ys = [];
+      let totalMass = 0;
+      for (let i=0;i<3;i++){
+        if (!sliders.m[i] || !sliders.x[i] || !sliders.y[i]) continue;
+        const m = Number(sliders.m[i].value) || 0;
+        const x = Number(sliders.x[i].value) || 0;
+        const y = Number(sliders.y[i].value) || 0;
+        masses[i] = m;
+        xs[i] = x;
+        ys[i] = y;
+        totalMass += m;
+      }
+      if (!totalMass) return;
+      let cmx = 0;
+      let cmy = 0;
+      for (let i=0;i<3;i++){
+        if (masses[i] == null) continue;
+        cmx += masses[i] * xs[i];
+        cmy += masses[i] * ys[i];
+      }
+      cmx /= totalMass;
+      cmy /= totalMass;
+      for (let i=0;i<3;i++){
+        if (!sliders.x[i] || !sliders.y[i]) continue;
+        const centeredX = (xs[i] ?? 0) - cmx;
+        const centeredY = (ys[i] ?? 0) - cmy;
+        sliders.x[i].value = Math.round(centeredX * biasFactor);
+        sliders.y[i].value = Math.round(centeredY * biasFactor);
+      }
     }
     function syncSliderOutputs(){
       for (let i=0;i<3;i++){
