@@ -335,7 +335,7 @@ main.panel{ background:#000; }
     // particles: stylized plasma bursts
     let particles = [];
     const MAX_PARTICLES = 500; // global cap to match perf target
-    const FLUID_EMIT_COUNT = 200; // total particles per collision (split across bodies)
+    const FLUID_EMIT_COUNT = 50; // total particles per collision (split across bodies)
     const EJECT_VEL_MUL = 17; // plasma ejection velocity multiplier
     const PARTICLE_GRAVITY_SCALE = 0.5; // damp gravity for plasma only
     const PARTICLE_LIFE_SCALE = 3.0;    // >1.0 = longer life, <1.0 = shorter
@@ -615,7 +615,7 @@ main.panel{ background:#000; }
         const c = worldToCanvas(q.x, q.y);
         const grd = ctx.createRadialGradient(c[0],c[1],0, c[0],c[1], r);
         const innerA = Math.min(0.95, 0.85*a);
-        const alphaScale = 1; // target 15% transparency
+        const alphaScale = .5; // target 15% transparency
         grd.addColorStop(0, 'rgba(255,255,230,'+(innerA*alphaScale)+')');
         grd.addColorStop(0.35, 'rgba(255,200,90,'+((0.45*a)*alphaScale)+')');
         grd.addColorStop(1, 'rgba(255,120,0,0)');
@@ -696,7 +696,7 @@ main.panel{ background:#000; }
         const c = worldToCanvas(q.x, q.y);
         const grd = ctx.createRadialGradient(c[0],c[1],0, c[0],c[1], r);
         const innerA = Math.min(1.0, 0.95*a + 0.2);
-        const alphaScale = 0.3; // target 10% transparency
+        const alphaScale = 0.1; // target 10% transparency
         grd.addColorStop(0, 'rgba(255,255,235,'+(innerA*alphaScale)+')');
         grd.addColorStop(0.30, 'rgba(255,210,100,'+((0.65*a)*alphaScale)+')');
         grd.addColorStop(1, 'rgba(255,130,10,0)');
