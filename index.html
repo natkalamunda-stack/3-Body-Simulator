@@ -786,7 +786,7 @@ main.panel{ background:#000; }
       if (!persp.enabled) return 1;
       // If focused on any body, turn off perspective sizing globally
       if (cam.target !== 'cm') return 1;
-      const zMin = 0.05, zMax = 5; // reference zoom bounds
+      const zMin = 0.2, zMax = 5; // reference zoom bounds
       const z = cam.scalePx;
       const zClamped = Math.max(zMin, Math.min(zMax, z));
       let t = (zClamped - zMin) / (zMax - zMin); // 0 at zMin, 1 at zMax
